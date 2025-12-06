@@ -1,59 +1,59 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pickle
 
-# =====================================================
-# LOAD MODEL + TF-IDF
-# =====================================================
-try:
-    bundle = pickle.load(open("PHEmail-Model.pkl", "rb"))
-    model = bundle["model"]
-    tfidf = bundle["tfidf"]
-    print("✅ Model loaded successfully.")
-except Exception as e:
-    print("❌ ERROR loading model:", e)
-    raise e
+# ========================================================
+# LOAD MODEL
+# ========================================================
+model_bundle = pickle.load(open("PHEmail-Model.pkl", "rb"))
+model = model_bundle["model"]
+tfidf = model_bundle["tfidf"]
 
-# =====================================================
-# FASTAPI APP INITIALIZATION
-# =====================================================
-app = FastAPI(
-    title="PHEmail Phishing Detection API",
-    description="Machine-learning phishing detector using Random Forest + TF-IDF",
-    version="1.0.0"
+print("🔥 Model Loaded Successfully!")
+
+# ========================================================
+# FASTAPI APP
+# ========================================================
+app = FastAPI()
+
+# ========================================================
+# ENABLE CORS FOR ALL ORIGINS
+# ========================================================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],           # allow all websites
+    allow_credentials=True,
+    allow_methods=["*"],           # allow POST, GET, OPTIONS...
+    allow_headers=["*"],
 )
 
-# =====================================================
-# REQUEST MODEL
-# =====================================================
-class EmailRequest(BaseModel):
+# ========================================================
+# INPUT SCHEMA
+# ========================================================
+class EmailInput(BaseModel):
     sender: str
     subject: str
     body: str
 
-# =====================================================
-# PREDICTION ROUTE
-# =====================================================
-@app.post("/predict")
-def predict(email: EmailRequest):
-
-    # Combine text
-    text = email.subject + " " + email.body
-    X = tfidf.transform([text])
-
-    pred = model.predict(X)[0]
-    probs = model.predict_proba(X)[0]
-
-    result = {
-        "prediction": "phishing" if pred == 1 else "legitimate",
-        "confidence": float(probs[1])  # probability of phishing
-    }
-
-    return result
-
-# =====================================================
-# ROOT CHECK
-# =====================================================
+# ========================================================
+# ROOT ENDPOINT
+# ========================================================
 @app.get("/")
 def home():
-    return {"message": "PHEmail API is running successfully!"}
+    return {"message": "PHEmail API is running!"}
+
+# ========================================================
+# PREDICT ENDPOINT
+# ========================================================
+@app.post("/predict")
+def predict(email: EmailInput):
+    full_text = email.subject + " " + email.body
+    X = tfidf.transform([full_text])
+    pred = model.predict(X)[0]
+    prob = model.predict_proba(X)[0][1]
+
+    return {
+        "prediction": "phishing" if pred == 1 else "legitimate",
+        "phishing_probability": float(prob)
+    }
